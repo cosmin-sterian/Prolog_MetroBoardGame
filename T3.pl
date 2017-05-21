@@ -51,7 +51,6 @@ get_path_tiles(Path, IDs) :- Path = _:IDs.
 
 
 
-
 get_neighbours(PlacedTileList:_:_, Coord, NeighList) :- 
 											Coord = (X, Y),
 											findall((X1, Y1),
@@ -92,39 +91,61 @@ generate_rotation(Tile, Rot, Acc1, Acc1, Acc2, Res2) :- Tile = _:_:_:_:TID, high
 %generate_rotation(Tile, Rot, Acc1, ResultTileList, Acc2, ResultRotationList) :- Tile = DW:DS:DE:DN:TID, ResultTile = DN:DW:DS:DE:TID, ResultRotation is Rot - 1, 
 %												generate_rotation(ResultTile, ResultRotation, [ResultTile|Acc1], ResultTileList, [ResultRotation|Acc2], ResultRotationList).
 
-% get_valid_rotations_in_margin(+TID, +Dir, -RotationsList)
-get_valid_rotations_in_margin(TID, Dir, RotationsList) :- 
+% get_valid_rotations_in_margin1(+TID, +Dir, -RotationsList)
+% Genereaza rotatiile posibile pentru cartea respectiva, in cazul cu un singur vecin entry_point
+get_valid_rotations_in_margin1(TID, Dir, RotationsList) :- 
 										tile(DW, DS, DE, DN, TID),
 										generate_rotation(DW:DS:DE:DN:TID, 0, [], ResultTileList, _, _),
 										findall(Elem:I,
 											(member(I, [1,2,3]), nth1(I, ResultTileList, Elem)),
-											Tiles),
+											Tiles),	% Aduc elementele la forma (DeltaW:DeltaS:DeltaE:DeltaN:TID):RID, adica mai concatenez :RID la elementele din lista. 
+													% Stiu ca au fost facute in ordine, deci RID e chiar indexul lor in lista
 										Tiles2 = [(DW:DS:DE:DN:TID):0 | Tiles],
-										Elem2 = (DW2:DS2:DE2:DN2:TID2):ROT2,
+										Elem2 = (DW2:DS2:DE2:DN2:_):_,
 										findall(Elem2,
 											(member(Elem2, Tiles2),
 												((Dir = e, DW2 \= 0); (Dir = n, DS2 \= 0); (Dir = w, DE2 \= 0); (Dir = s, DN2 \= 0))),
 											RotationsList).
 
-%get_valid_rotations_in_margin(TID, n, RotationsList) :-
-%											findall(Rot,
-%												(member(Rot, [0,1,2,3]), )
-%												)
+% get_valid_rotations_in_margin2(+TID, +Dir1, +Dir2, -RotationsList)
+% Genereaza rotatiile posibile pentru cartea respectiva, in cazul cu doi vecini entry_point
+get_valid_rotations_in_margin2(TID, Dir1, Dir2, RotationsList) :-
+													tile(DW, DS, DE, DN, TID),
+													generate_rotation(DW:DS:DE:DN:TID, 0, [], ResultTileList, _, _),
+													findall(Elem:I,
+														(member(I, [1,2,3]), nth1(I, ResultTileList, Elem)),
+														Tiles),
+													Tiles2 = [(DW:DS:DE:DN:TID):0 | Tiles],
+													Elem2 = (DW2:DS2:DE2:DN2:_):_,
+													findall(Elem2,
+														(member(Elem2, Tiles2),
+															(
+																((Dir1 = e, Dir2 = n); (Dir1 = n, Dir2 = e), DW2 \= 0, DS2 \= 0, DW2 \= 1, DS2 \= 3); 
+																((Dir1 = n, Dir2 = w); (Dir1 = w, Dir2 = n), DS2 \= 0, DE2 \= 0, DS2 \= 1, DE2 \= 3); 
+																((Dir1 = w, Dir2 = s); (Dir1 = s, Dir2 = w), DE2 \= 0, DN2 \= 0, DE2 \= 1, DN2 \= 3); 
+																((Dir1 = s, Dir2 = e); (Dir1 = e, Dir2 = s), DN2 \= 0, DW2 \= 0, DN2 \= 1, DW2 \= 3)
+																)),
+														RotationsList).
 
-%match_tiles_by_neighbours(Tiles, NeighList, Coord, ResultTilesList) :-
-%															Tile = TID:RID,
-%															Coord = (X, Y),
-%															Neigh = (Xn, Yn),
-%															Neigh2 = (Xn, Yn, Dir)
-%															findall(Neigh2,
-%																(member(Neigh, NeighList), entry_point(Xn, Yn, Dir)),
-%																NeighList2),	%Fac o lista cu vecinii din marginea hartii, memorand si directia spre care pleaca trenul.
-%															findall(Tile,
-%																(member(Tile, Tiles),
-%																	(NeighList2 = []);
-%																	(NeighList2 = [_], TID \= '#1', )
-%																	)
-%																)
+% filter_tiles_by_neighbours(+Tiles, +NeighList, +Coord, -ResultTilesList)
+% Pastreaza din lista de carti doar pe cele care pot fi folosite, tinand cont de vecinii din margine.
+filter_tiles_by_neighbours(Tiles, NeighList, Coord, ResultTilesList) :-
+															Tile = TID:RID,
+															Coord = (X, Y),
+															Neigh = (Xn, Yn),
+															Neigh2 = (Xn, Yn, Dir),
+															findall(Neigh2,
+																(member(Neigh, NeighList), entry_point(Xn, Yn, Dir)),
+																NeighList2),	%Fac o lista cu vecinii din marginea hartii, memorand si directia spre care pleaca trenul.
+															findall(TileResult,
+																(member(Tile, Tiles),
+																	(NeighList2 = [], TileResult = Tile);
+																	(NeighList2 = [N1], N1 = (_, _, DirN1), get_valid_rotations_in_margin1(TID, DirN1, RotationsList), 
+																		member(T, RotationsList), T = (_:_:_:_:ResTID):ResRot, rotation(ResRot, ResRID), TileResult = ResTID:ResRID);
+																	(NeighList2 = [N1, N2], N1 = (_, _, DirN1), N2 = (_, _, DirN2), get_valid_rotations_in_margin2(TID, DirN1, DirN2, RotationsList),
+																		member(T, RotationsList), T = (_:_:_:_:ResTID):ResRot, rotation(ResRot, ResRID), TileResult = ResTID:ResRID)
+																	),
+																ResultTilesList).
 
 % available_move(+GameState, -Move)
 % Predicatul leagă argumentul Move la o mutare disponibilă
