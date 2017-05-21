@@ -51,6 +51,81 @@ get_path_tiles(Path, IDs) :- Path = _:IDs.
 
 
 
+
+get_neighbours(PlacedTileList:_:_, Coord, NeighList) :- 
+											Coord = (X, Y),
+											findall((X1, Y1),
+												(
+													(X1 is X-1, Y1 is Y, exit_point(X1,Y1,_); member((X1,Y1):_:_, PlacedTileList));
+													(X1 is X, Y1 is Y+1, exit_point(X1,Y1,_); member((X1,Y1):_:_, PlacedTileList));
+													(X1 is X+1, Y1 is Y, exit_point(X1,Y1,_); member((X1,Y1):_:_, PlacedTileList));
+													(X1 is X, Y1 is Y-1, exit_point(X1,Y1,_); member((X1,Y1):_:_, PlacedTileList))
+												), NeighList2),
+											setof(Elem, member(Elem, NeighList2), NeighList).	% Nu imi dau seama de ce, dar daca fac setof direct in loc de findall, imi intoarce pe rand (cu ; la consola) solutiile cu duplicate
+
+% valid_rotation(+TID, ?RID)
+% Verifica ce rotatii valide are cartea respectiva
+valid_rotation(_, 0).
+valid_rotation(TID, 1) :- \+member(TID, ['#1', '#6', '#9', '#10']).
+valid_rotation(TID, RID) :- \+member(TID, ['#1', '#4', '#6', '#8', '#9', '#10']), member(RID, [2,3]).
+
+% highest_rotation(+TID, -RID)
+% Gaseste cea mai mare rotatie valida(ca id).
+highest_rotation(TID, RID) :- member(RID, [3,2,1,0]), valid_rotation(TID, RID), !.
+
+% gen_all_tiles(-TilesList)
+% Generarea unei liste cu toate cartile si rotatiile lor posibile(si care au sens).
+gen_all_tiles(TilesList) :- 
+					Tile = TID:RID,
+					findall(Tile,
+						(tile(_, _, _, _, TID), member(X, [0,1,2,3]), rotation(X, RID),
+							valid_rotation(TID, X)
+							),
+						TilesList).
+
+% Genereaza o lista de permutari ale parametrilor Delta ale unei carti date.
+generate_rotation(Tile, Rot, Acc1, ResultTilesList, Acc2, ResultRotationList) :- Tile = DW:DS:DE:DN:TID, ResultTile = DN:DW:DS:DE:TID, highest_rotation(TID, MaxRot), Rot < MaxRot, ResultRotation is Rot + 1,
+															generate_rotation(ResultTile, ResultRotation, [ResultTile|Acc1], ResultTilesList, [ResultRotation|Acc2], ResultRotationList).
+generate_rotation(Tile, Rot, Acc1, Acc1, Acc2, Res2) :- Tile = _:_:_:_:TID, highest_rotation(TID, MaxRot), Rot = MaxRot, reverse(Acc2, Res2), !.
+
+%generate_rotation(_, 0, Acc1, Res1, Acc2, Res2) :- reverse(Acc1, Res1), reverse(Acc2, Res2), !.
+%generate_rotation(Tile, Rot, Acc1, ResultTileList, Acc2, ResultRotationList) :- Tile = DW:DS:DE:DN:TID, ResultTile = DN:DW:DS:DE:TID, ResultRotation is Rot - 1, 
+%												generate_rotation(ResultTile, ResultRotation, [ResultTile|Acc1], ResultTileList, [ResultRotation|Acc2], ResultRotationList).
+
+% get_valid_rotations_in_margin(+TID, +Dir, -RotationsList)
+get_valid_rotations_in_margin(TID, Dir, RotationsList) :- 
+										tile(DW, DS, DE, DN, TID),
+										generate_rotation(DW:DS:DE:DN:TID, 0, [], ResultTileList, _, _),
+										findall(Elem:I,
+											(member(I, [1,2,3]), nth1(I, ResultTileList, Elem)),
+											Tiles),
+										Tiles2 = [(DW:DS:DE:DN:TID):0 | Tiles],
+										Elem2 = (DW2:DS2:DE2:DN2:TID2):ROT2,
+										findall(Elem2,
+											(member(Elem2, Tiles2),
+												((Dir = e, DW2 \= 0); (Dir = n, DS2 \= 0); (Dir = w, DE2 \= 0); (Dir = s, DN2 \= 0))),
+											RotationsList).
+
+%get_valid_rotations_in_margin(TID, n, RotationsList) :-
+%											findall(Rot,
+%												(member(Rot, [0,1,2,3]), )
+%												)
+
+%match_tiles_by_neighbours(Tiles, NeighList, Coord, ResultTilesList) :-
+%															Tile = TID:RID,
+%															Coord = (X, Y),
+%															Neigh = (Xn, Yn),
+%															Neigh2 = (Xn, Yn, Dir)
+%															findall(Neigh2,
+%																(member(Neigh, NeighList), entry_point(Xn, Yn, Dir)),
+%																NeighList2),	%Fac o lista cu vecinii din marginea hartii, memorand si directia spre care pleaca trenul.
+%															findall(Tile,
+%																(member(Tile, Tiles),
+%																	(NeighList2 = []);
+%																	(NeighList2 = [_], TID \= '#1', )
+%																	)
+%																)
+
 % available_move(+GameState, -Move)
 % Predicatul leagă argumentul Move la o mutare disponibilă
 % în starea GameState a jocului. Formatul pentru Move trebuie
@@ -66,11 +141,15 @@ get_path_tiles(Path, IDs) :- Path = _:IDs.
 % duplicate.
 available_move(GameState, Move) :- 
 									Move = Coord:TID:RID,
-									GameState = PlacedTileList:_:_,
+									%GameState = PlacedTileList:_:_,
 									Coord = (X, Y),
 									limits(1, 1, W, H),
-									between(1, W, X), between(1, H, Y), \+center_space(X, Y),	% Elimin coordonatele din centru ca fiind posibile
-									\+member(Coord, PlacedTileList).
+									between(1, W, X), between(1, H, Y), \+center_space(X, Y),	% Elimin coordonatele din centru ca fiind solutii posibile
+									get_neighbours(GameState, Coord, NeighList),
+									\+member(Coord, NeighList),	%Elimin coordonatele deja ocupate de alte carti ca fiind solutii posibile
+									tile(DW, DS, DE, DN, TID),
+									(member(Margin, NeighList), Margin = (XMargin, YMargin), exit_point(XMargin, YMargin, Dir),
+										(Dir = n)). % TODO: Sa verific daca exista un vecin exit_point ca sa filtrez cartile cu +0
 
 % Atenție! Folosirea celor 3 predicate get_move_* pe aceeași
 % variabilă neinstanțiată Move trebuie să rezulte în legarea
@@ -83,7 +162,7 @@ available_move(GameState, Move) :-
 % (X, Y) de pe hartă unde a fost pusă o carte în urma
 % mutării Move.
 % Vezi și observația de mai sus.
-get_move_space(_,_) :- fail.
+get_move_space(Space:_:_, Space).
 
 % get_move_tile_id(?Move, ?TID)
 % Predicatul este adevărat dacă TID corespunde
