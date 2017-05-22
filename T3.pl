@@ -59,10 +59,10 @@ get_neighbours(PlacedTileList:_:_, Coord, NeighList) :-
 											Coord = (X, Y),
 											findall((X1, Y1),
 												(
-													(X1 is X-1, Y1 is Y, entry_point(X1,Y1,_); member((X1,Y1):_:_, PlacedTileList));
-													(X1 is X, Y1 is Y+1, entry_point(X1,Y1,_); member((X1,Y1):_:_, PlacedTileList));
-													(X1 is X+1, Y1 is Y, entry_point(X1,Y1,_); member((X1,Y1):_:_, PlacedTileList));
-													(X1 is X, Y1 is Y-1, entry_point(X1,Y1,_); member((X1,Y1):_:_, PlacedTileList))
+													(X1 is X-1, Y1 is Y, (exit_point(X1,Y1,_); member(((X1,Y1),_,_), PlacedTileList)));
+													(X1 is X, Y1 is Y+1, (exit_point(X1,Y1,_); member(((X1,Y1),_,_), PlacedTileList)));
+													(X1 is X+1, Y1 is Y, (exit_point(X1,Y1,_); member(((X1,Y1),_,_), PlacedTileList)));
+													(X1 is X, Y1 is Y-1, (exit_point(X1,Y1,_); member(((X1,Y1),_,_), PlacedTileList)))
 												), NeighList2),
 											setof(Elem, member(Elem, NeighList2), NeighList).	% Nu imi dau seama de ce, dar daca fac setof direct in loc de findall, imi intoarce pe rand (cu ; la consola) solutiile cu duplicate
 
@@ -79,9 +79,9 @@ highest_rotation(TID, RID) :- member(RID, [3,2,1,0]), valid_rotation(TID, RID), 
 % gen_all_tiles(-TilesList)
 % Generarea unei liste cu toate cartile si rotatiile lor posibile(si care au sens).
 gen_all_tiles(TilesList) :- 
-					Tile = TID:_,
+					Tile = TID:RID,
 					findall(Tile,
-						tile(_, _, _, _, TID),
+						(tile(_, _, _, _, TID), member(Rot, [0,1,2,3]), valid_rotation(TID, Rot), rotation(Rot, RID)),
 						TilesList).
 
 % Genereaza o lista de permutari ale parametrilor Delta ale unei carti date.
@@ -170,7 +170,7 @@ available_move(GameState, Move) :-
 							get_neighbours(GameState, Coord, NeighList),
 							get_game_tiles(GameState, PlacedTileList), \+member((Coord,_,_), PlacedTileList),	%Elimin coordonatele altor carti ca fiind pozitii disponibile
 							findall(Neigh,
-								member(Neigh, NeighList),
+								(member(Neigh, NeighList), Neigh = (Xn, Yn), (entry_point(Xn, Yn, _); member((Neigh,_,_), PlacedTileList))),
 								[ _ |_]),	% Elimin coordonatele care nu sunt invecinate cu spatii deja ocupate(cartea trebuie plasata langa o margine a hartii sau langa o alta carte)
 							gen_all_tiles(Tiles),
 							filter_tiles_by_neighbours(Tiles, NeighList, ResultTilesList),
