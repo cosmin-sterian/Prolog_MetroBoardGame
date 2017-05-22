@@ -17,7 +17,11 @@ initial_game_state([]:[]:[]).
 % - coordonatele (X, Y) ale spațiului unde este cartea
 % - identificatorul cărții (#1..#10)
 % - identificatorul rotației (R0..R3)
-get_game_tiles(GameState, PlacedTileList) :- GameState = PlacedTileList:_:_.
+get_game_tiles(PlacedTileList:_:_, PlacedTileList).
+%get_game_tiles(GameState, PlacedTileList) :- GameState = PlacedTileList1:_:_, Tile = Coord:TID:RID,
+%								findall(Result,
+%									(member(Tile, PlacedTileList1), Result = (Coord, TID, RID)),
+%									PlacedTileList).
 
 % get_open_paths(+GameState, -Paths)
 % Întoarce în Paths o listă de trasee care pornesc
@@ -158,13 +162,13 @@ filter_tiles_by_neighbours(Tiles, NeighList, ResultTilesList) :-
 % întoarcă în Moves toate mutările valide în starea dată, fără
 % duplicate.
 available_move(GameState, Move) :- 
-							Move = Coord:TID:RID,
+							Move = (Coord, TID, RID),
 							%GameState = PlacedTileList:_:_,
 							Coord = (X, Y),
 							limits(1, 1, W, H),
 							between(1, W, X), between(1, H, Y), \+center_space(X, Y),	% Elimin coordonatele din centru ca fiind solutii posibile
 							get_neighbours(GameState, Coord, NeighList),
-							\+member(Coord, NeighList),	% Elimin coordonatele deja ocupate de alte carti ca fiind solutii posibile
+							get_game_tiles(GameState, PlacedTileList), \+member((Coord,_,_), PlacedTileList),	%Elimin coordonatele altor carti ca fiind pozitii disponibile
 							findall(Neigh,
 								member(Neigh, NeighList),
 								[ _ |_]),	% Elimin coordonatele care nu sunt invecinate cu spatii deja ocupate(cartea trebuie plasata langa o margine a hartii sau langa o alta carte)
@@ -184,35 +188,41 @@ available_move(GameState, Move) :-
 % (X, Y) de pe hartă unde a fost pusă o carte în urma
 % mutării Move.
 % Vezi și observația de mai sus.
-get_move_space(Space:_:_, Space).
+get_move_space((Space, _, _), Space).
 
 % get_move_tile_id(?Move, ?TID)
 % Predicatul este adevărat dacă TID corespunde
 % identificatorului ('#1'..'#10') cărții care a fost plasată
 % pe hartă în urma mutării Move.
 % Vezi și observația de mai sus.
-get_move_tile_id(_:TID:_, TID).
+get_move_tile_id((_, TID, _), TID).
 
 % get_move_rotation_id(?Move, ?RotID)
 % Predicatul este adevărat dacă RotID corespunde
 % identificatorului rotației ('R0'..'R3') cărții care a fost
 % plasată în urma mutării Move.
 % Vezi și observația de mai sus.
-get_move_rotation_id(_:_:RotID, RotID).
+get_move_rotation_id((_, _, RotID), RotID).
 
 
 
 % apply_move(+GameStateBefore, +Move, -GameStateAfter)
 % Leagă al treilea argument la starea de joc care rezultă
 % în urma aplicării mutării Move în starea GameStateBefore.
-apply_move(_,_,_) :- fail.
+apply_move(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAfter) :- 
+							get_neighbours(PlacedTileList:_:_, Coord, NeighList),
+							(	%Am doar vecini entry_point, deci se porneste o cale noua.
+								forall(member((Xn, Yn), NeighList), entry_point(Xn, Yn, _)),
+								(NeighList = [N1], NewPath = N1:[(TID, RID)], ResultOpenPaths = [NewPath | OpenPaths]);	%Am doar un vecin entry_point
+								(NeighList = [N1, N2], NewPath1 = N1:[(TID, RID)], NewPath2 = N2:[(TID, RID)], ResultOpenPaths = [NewPath1, NewPath2 | OpenPaths])	%Am doi vecini entry_point
+								),
+							GameStateAfter = [(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths.	%+OpenPaths si ClosedPaths
 
 % pick_move(+GameState, +TID, -Move)
 % Alege o mutare care folosește cartea cu identificatorul TID,
 % pentru a fi aplicată în starea GameState. Mutarea este
 % întoarsă în Move.
 pick_move(_,_,_) :- fail.
-
 
 % play_game(-FinalGameState)
 % Joacă un joc complet, pornind de la starea inițială a jocului
