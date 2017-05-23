@@ -51,7 +51,8 @@ get_path_entry(Path, Point) :- Path = Point:_.
 % identificatorul rotației acesteia.
 % Este posibil ca o carte să apară în traseu de mai multe ori,
 % dacă traseul trece de mai multe ori prin ea.
-get_path_tiles(Path, IDs) :- Path = _:Carte, Carte = IDs:_:_.	%IDs:Entry:Exit
+get_path_tiles(Path, IDs) :- Path = _:Carti, 
+								findall(ID, (member(Carte, Carti), Carte = ID:_:_:_), IDs2), reverse(IDs2, IDs).	%IDs:Entry:Exit
 
 
 
@@ -253,21 +254,62 @@ explore_open_path(PlacedTileList:_:_, CurrentPath, Current, Acc, FinalOpenPath) 
 % apply_move(+GameStateBefore, +Move, -GameStateAfter)
 % Leagă al treilea argument la starea de joc care rezultă
 % în urma aplicării mutării Move în starea GameStateBefore.
-apply_move(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAfter) :- 
+apply_move(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAfter) :-
+							get_neighbours(PlacedTileList:_:_, Coord, NeighList),
+							findall(NewPathElem,
+								(
+									member(Neigh, NeighList), Neigh = (Xn, Yn), entry_point(Xn, Yn, Dirn),	% Vecin entry_point
+									reverse_dir(Dirn, Entry_Dir1), compute_exit_dir(TID, RID, Entry_Dir1, Exit_Dir1),
+									NewPathElem = (Xn, Yn):[(TID, RID):Coord:Entry_Dir1:Exit_Dir1]
+									),
+								NewPath1),
+							myConcat(NewPath1, OpenPaths, AuxPaths),	% Adaug pathurile noi la lista de pathuri
+							
+							findall(NewPath,
+								(
+									member(Path, AuxPaths), Path = StartCoord:Path2, Path2 = [H2|_], explore_open_path([(Coord, TID, RID) | PlacedTileList]:_:_, Path2, H2, [], NewPath2), NewPath = StartCoord:NewPath2
+									),
+								ResultOpenPaths),
+
+							% TODO: Check if an open path can be closed.
+
+							GameStateAfter = [(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths.
+
+apply_move2(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAfter) :- 
 							get_neighbours(PlacedTileList:_:_, Coord, NeighList), (
 							(	% Am doar vecini entry_point, deci se porneste o cale noua.
 								forall(member((Xn, Yn), NeighList), entry_point(Xn, Yn, _)),
 								(NeighList = [N1], N1 = (X1, Y1), entry_point(X1, Y1, Dir1), reverse_dir(Dir1, Entry_Dir1), compute_exit_dir(TID, RID, Entry_Dir1, Exit_Dir1), 
-									NewPath = N1:[(TID, RID):Coord:Dir1:Exit_Dir1], ResultOpenPaths = [NewPath | OpenPaths]);	% Am doar un vecin entry_point
+									NewPath = N1:[(TID, RID):Coord:Entry_Dir1:Exit_Dir1], ResultOpenPaths = [NewPath | OpenPaths]);	% Am doar un vecin entry_point
 								(NeighList = [N1, N2], N1 = (X1, Y1), N2 = (X2, Y2), entry_point(X1, Y1, Dir1), entry_point(X2, Y2, Dir2), reverse_dir(Dir1, Entry_Dir1), reverse_dir(Dir2, Entry_Dir2), 
 									compute_exit_dir(TID, RID, Entry_Dir1, Exit_Dir1), compute_exit_dir(TID, RID, Entry_Dir2, Exit_Dir2),
 									NewPath1 = N1:[(TID, RID):Coord:Entry_Dir1:Exit_Dir1], NewPath2 = N2:[(TID, RID):Coord:Entry_Dir2:Exit_Dir2], ResultOpenPaths = [NewPath1, NewPath2 | OpenPaths])	% Am doi vecini entry_point
 								);
 							(	% Am doar carti vecine(nu am vecini exit_point)
-								forall(member((Xn, Yn), NeighList), \+exit_point(Xn, Yn, _))
-
+								forall(member((Xn, Yn), NeighList), \+exit_point(Xn, Yn, _)),
+								findall(NewPath,
+									(
+										member(Path, OpenPaths), Path = _:Path2, Path2 = [H2|_], explore_open_path([(Coord, TID, RID) | PlacedTileList]:_:_, Path2, H2, [], NewPath)
+										),
+									ResultOpenPaths)
+								/*findall(NewPath,
+									(
+										member(Path, OpenPaths), Path = StartCoord:Path_TilesList, Path_TilesList = [Head |_], Head = _:Head_Coord:_:Head_ExitDir,
+										(	% vv Drumul care ramane deschis in Head este orientat catre Coord(Move-ul curent), adica daca as aplica acest Move, drumul s-ar prelungi prin cartea plasata in urma aplicarii lui Move
+											(whereis(Head_Coord, Coord, Head_ExitDir), reverse_dir(Head_ExitDir, My_EntryDir), 
+												compute_exit_dir(TID, RID, My_EntryDir, My_ExitDir), NewPath_TilesList = [ (TID, RID):Coord:My_EntryDir:My_ExitDir | Path_TilesList ], NewPath = StartCoord:NewPath_TilesList);
+											% vv Drumul deschis nu ajunge in cartea noua
+											(\+whereis(Head_Coord, Coord, Head_ExitDir), NewPath = Path)
+											)
+										),
+									NewOpenPaths)*/
 								)
+							/*(	% Am si carti vecine, si entry
+								)*/
 							),
+							/*findall(ResultPath,
+								(member(Path2, NewOpenPaths), Path2 = _:[H2 |_], explore_open_path([(Coord, TID, RID) | PlacedTileList]:_:_, Path2, H2, [], ResultPath)),
+								ResultOpenPaths),*/
 							GameStateAfter = [(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths.	%+OpenPaths si ClosedPaths
 
 % pick_move(+GameState, +TID, -Move)
