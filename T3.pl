@@ -51,7 +51,7 @@ get_path_entry(Path, Point) :- Path = Point:_.
 % identificatorul rotației acesteia.
 % Este posibil ca o carte să apară în traseu de mai multe ori,
 % dacă traseul trece de mai multe ori prin ea.
-get_path_tiles(Path, IDs) :- Path = _:IDs.
+get_path_tiles(Path, IDs) :- Path = _:Carte, Carte = IDs:_:_.	%IDs:Entry:Exit
 
 
 
@@ -163,12 +163,11 @@ filter_tiles_by_neighbours(Tiles, NeighList, ResultTilesList) :-
 % duplicate.
 available_move(GameState, Move) :- 
 							Move = (Coord, TID, RID),
-							%GameState = PlacedTileList:_:_,
 							Coord = (X, Y),
 							limits(1, 1, W, H),
 							between(1, W, X), between(1, H, Y), \+center_space(X, Y),	% Elimin coordonatele din centru ca fiind solutii posibile
 							get_neighbours(GameState, Coord, NeighList),
-							get_game_tiles(GameState, PlacedTileList), \+member((Coord,_,_), PlacedTileList),	%Elimin coordonatele altor carti ca fiind pozitii disponibile
+							get_game_tiles(GameState, PlacedTileList), \+member((Coord,_,_), PlacedTileList),	% Elimin coordonatele altor carti ca fiind pozitii disponibile
 							findall(Neigh,
 								(member(Neigh, NeighList), Neigh = (Xn, Yn), (entry_point(Xn, Yn, _); member((Neigh,_,_), PlacedTileList))),
 								[ _ |_]),	% Elimin coordonatele care nu sunt invecinate cu spatii deja ocupate(cartea trebuie plasata langa o margine a hartii sau langa o alta carte)
@@ -204,18 +203,71 @@ get_move_tile_id((_, TID, _), TID).
 % Vezi și observația de mai sus.
 get_move_rotation_id((_, _, RotID), RotID).
 
+% compute_exit_dir(+TID, +RID, +Entry_Dir, ?Exit_Dir)
+% Determina directia catre care se continua traseul care intra prin latura Entry_Dir
+compute_exit_dir(TID, RID, Entry_Dir, Exit_Dir) :-
+									tile(DW,DS,DE,DN,TID),
+									generate_rotation(DW:DS:DE:DN:TID, 0, [DW:DS:DE:DN:TID], RotationsList, _, _),
+									rotation(Rot, RID),
+									nth0(Rot, RotationsList, MyRotation),
+									MyRotation = DW1:DS1:DE1:DN1:_,	% Generez rotatia cartii de care am nevoie, si o salvez in MyRotation
+									(
+										(Entry_Dir = w, TheDelta = DW1);
+										(Entry_Dir = s, TheDelta = DS1);
+										(Entry_Dir = e, TheDelta = DE1);
+										(Entry_Dir = n, TheDelta = DN1)
+										),
+									nth0(I, [w,s,e,n], Entry_Dir), I1 is I+TheDelta, I2 is I1 mod 4, nth0(I2, [w,s,e,n], Exit_Dir).	% I+TheDelta deoarece "sar" +TheDelta laturi in sens trigonometric
 
+reverse_dir(Dir, Result) :-
+				nth0(I, [w,s,e,n], Dir),
+				I1 is I+2, I2 is I1 mod 4, nth0(I2, [w,s,e,n], Result).
+
+whereis(MyCoord, TargetCoord, ResultDir) :-
+								MyCoord = (X, Y),
+								TargetCoord = (Xt, Yt),
+								(
+									(Xt = X, Yt is Y-1, ResultDir = n);
+									(Xt is X-1, Yt = Y, ResultDir = w);
+									(Xt = X, Yt is Y+1, ResultDir = s);
+									(Xt is X+1, Yt = Y, ResultDir = e)
+									).
+
+myConcat([], L2, L2).
+myConcat([H | T1], L2, [H | T3]) :- myConcat(T1, L2, T3).
+
+explore_open_path(PlacedTileList:_:_, CurrentPath, Current, Acc, FinalOpenPath) :-
+										Current = _:(X,Y):_:Exit_Dir,
+										whereis((X, Y), (Xt, Yt), Exit_Dir),
+										(
+											(\+member(((Xt, Yt),_,_), PlacedTileList), \+exit_point(Xt, Yt, _), myConcat(Acc, CurrentPath, FinalOpenPath));	% Nu am carte in continuarea drumului
+											(Tile = ((Xt, Yt),TID,RID), member(Tile, PlacedTileList), 	% In continuare, am o carte
+												reverse_dir(Exit_Dir, New_Entry_Dir), compute_exit_dir(TID, RID, New_Entry_Dir, New_Exit_Dir), NewPathElem = (TID, RID):(Xt,Yt):New_Entry_Dir:New_Exit_Dir,
+												explore_open_path(PlacedTileList:_:_, CurrentPath, NewPathElem, [NewPathElem | Acc], FinalOpenPath));	% Explorez mai departe traseul prin cartea vecina
+											(	% In continuare am un exit_point
+												exit_point(Xt, Yt, _),
+												myConcat(Acc, CurrentPath, FinalOpenPath)
+												)
+											).
 
 % apply_move(+GameStateBefore, +Move, -GameStateAfter)
 % Leagă al treilea argument la starea de joc care rezultă
 % în urma aplicării mutării Move în starea GameStateBefore.
 apply_move(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAfter) :- 
-							get_neighbours(PlacedTileList:_:_, Coord, NeighList),
-							(	%Am doar vecini entry_point, deci se porneste o cale noua.
+							get_neighbours(PlacedTileList:_:_, Coord, NeighList), (
+							(	% Am doar vecini entry_point, deci se porneste o cale noua.
 								forall(member((Xn, Yn), NeighList), entry_point(Xn, Yn, _)),
-								(NeighList = [N1], NewPath = N1:[(TID, RID)], ResultOpenPaths = [NewPath | OpenPaths]);	%Am doar un vecin entry_point
-								(NeighList = [N1, N2], NewPath1 = N1:[(TID, RID)], NewPath2 = N2:[(TID, RID)], ResultOpenPaths = [NewPath1, NewPath2 | OpenPaths])	%Am doi vecini entry_point
-								),
+								(NeighList = [N1], N1 = (X1, Y1), entry_point(X1, Y1, Dir1), reverse_dir(Dir1, Entry_Dir1), compute_exit_dir(TID, RID, Entry_Dir1, Exit_Dir1), 
+									NewPath = N1:[(TID, RID):Coord:Dir1:Exit_Dir1], ResultOpenPaths = [NewPath | OpenPaths]);	% Am doar un vecin entry_point
+								(NeighList = [N1, N2], N1 = (X1, Y1), N2 = (X2, Y2), entry_point(X1, Y1, Dir1), entry_point(X2, Y2, Dir2), reverse_dir(Dir1, Entry_Dir1), reverse_dir(Dir2, Entry_Dir2), 
+									compute_exit_dir(TID, RID, Entry_Dir1, Exit_Dir1), compute_exit_dir(TID, RID, Entry_Dir2, Exit_Dir2),
+									NewPath1 = N1:[(TID, RID):Coord:Entry_Dir1:Exit_Dir1], NewPath2 = N2:[(TID, RID):Coord:Entry_Dir2:Exit_Dir2], ResultOpenPaths = [NewPath1, NewPath2 | OpenPaths])	% Am doi vecini entry_point
+								);
+							(	% Am doar carti vecine(nu am vecini exit_point)
+								forall(member((Xn, Yn), NeighList), \+exit_point(Xn, Yn, _))
+
+								)
+							),
 							GameStateAfter = [(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths.	%+OpenPaths si ClosedPaths
 
 % pick_move(+GameState, +TID, -Move)
@@ -223,6 +275,12 @@ apply_move(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAft
 % pentru a fi aplicată în starea GameState. Mutarea este
 % întoarsă în Move.
 pick_move(_,_,_) :- fail.
+
+add_test(List, ResultList) :-
+				findall(List2Mod,
+					(member(List2, List), ((findall(Numar, (member(Numar, List2), Numar < 2), [_|_]), List2Mod = [a | List2]); (findall(Numar, (member(Numar, List2), Numar >= 2), List2), List2Mod = List2))),
+						ResultList
+					).
 
 % play_game(-FinalGameState)
 % Joacă un joc complet, pornind de la starea inițială a jocului
