@@ -1,4 +1,5 @@
-
+:- ensure_loaded('T3.pl').
+:- ensure_loaded('T3base.pl').
 
 :- dynamic ttc/0.
 :- dynamic longform.
@@ -24,6 +25,7 @@ ttpoints(31/_/_/_/_, 0.2).
 ttpoints(32/_/_/_/_, 0.2).
 ttpoints(41/_, 15).
 ttpoints(X, 2) :- member(X, [50, 51, 52, 53, 54, 55, 56, 57, 58, 59]).
+ttpoints(X, 4) :- member(X, [61, 62, 63, 64, 65]).
 
 tte(M, Test, Vars) :- \+ longform -> fail ;
     format("~15+ Test ~w error: ", [Test]),
@@ -464,6 +466,15 @@ tt(TT) :- TT = 57, ( ttc -> true; tt_free(30, 1, 0, TT)).
 tt(TT) :- TT = 58, ( ttc -> true; tt_free(30, 1, 0, TT)).
 tt(TT) :- TT = 59, ( ttc -> true; tt_free(30, 1, 0, TT)).
 
+
+
+tt(TT) :- TT = 61, ( ttc -> true; tt_bonus_comp(160, TT)).
+tt(TT) :- TT = 62, ( ttc -> true; tt_bonus_comp(180, TT)).
+tt(TT) :- TT = 63, ( ttc -> true; tt_bonus_comp(200, TT)).
+tt(TT) :- TT = 64, ( ttc -> true; tt_bonus_comp(200, TT)).
+tt(TT) :- TT = 65, ( ttc -> true; tt_bonus_comp(220, TT)).
+
+
 tt_free(MLT, MLO, MLC, TT) :-
     tt_reset_stack, findall(T, (tile(_, _, _, _, T), T \= '#1'), L), assert(tt_tile_range(L)),
     tt_run_play(GSR, TT), tt_check_final(GSR, -1, -1, -1, L, TT),
@@ -472,7 +483,37 @@ tt_free(MLT, MLO, MLC, TT) :-
     (   LT >= MLT, ! ; tte("There are ~w tiles but there should be at least ~w", TT, [LT, MLT])),
     (   (LC >= MLO ; LO >= MLO), ! ;
               tte("There are ~w open paths but there should be at least ~w", TT, [LO, MLO])),
-    (   LC >= MLC, ! ; tte("There are ~w closed paths but there should be at least ~w", TT, [LC, MLC])).
+    (   LC >= MLC, ! ; tte("There are ~w closed paths but there should be at least ~w", TT, [LC, MLC]))
+    .
+
+tt_times([1,2,3,4,5]).
+
+tt_bonus_comp(Min, TT) :-
+    tt_times(Tms), length(Tms, N),
+    format("Test ~w: Testing for ~w games with score above ~w~n", [TT, N, Min]),
+    forall(member(_, Tms),
+           tt_bonus(['#1', '#2','#3','#4','#5','#6','#7','#8','#9','#10'], Min, TT)).
+
+
+tt_bonus(TRange, Limit, TT) :-
+    tt_reset_stack, assert(tt_tile_range(TRange)),
+    tt_run_play(GSR, TT),
+    tt_get_game_components(GSR, Tiles, _, Closed, TT),
+    tt_score(Closed, Tiles, Total, TT),
+    (   Total >= Limit, ! ;
+        tte("(BONUS) Game score is ~w, but was expected to be above ~w.",
+            TT, [Total, Limit])),
+    format("Test ~w: Score: ~w~n", [TT, Total]).
+
+tt_compute_score(Path, Tiles, Score, TT) :-
+    tt_get_path_components(Path, _, PTiles, TT),
+    tt_check_path(Path, Tiles, closed, BType, TT),
+    length(PTiles, L),
+    (   BType == center -> Score is L * 2; Score is L).
+
+tt_score(Closed, Tiles, Total, TT) :-
+    findall(Score, (member(P, Closed), tt_compute_score(P, Tiles, Score, TT)), Scores),
+    sum_list(Scores, Total).
 
 
 tt_reset_stack :- retractall(tt_tile_range(_)), retractall(tt_tiles_returned(_)).
@@ -495,9 +536,6 @@ tt_next_tile(0, Tile) :-
     \+ tt_tiles_returned(_), !,
     tt_generate_tile(Tile),
     assert(tt_tiles_returned([Tile])).
-tt_next_tile(T, _) :- T > 0,
-    \+ tt_tiles_returned(_), !,
-    tte("Tile requested for future time ~w (current time 0)", '##', [T]).
 tt_next_tile(Time, Tile) :- tt_tiles_returned(Tiles), length(Tiles, ActTime),
     (   Time =< ActTime -> true; !, tte("Tile requested for future time ~w (current time ~w)",
                                 '##', [Time, ActTime])),
@@ -539,26 +577,28 @@ tt_check_final(GS, NT, NOpen, NClosed, TAv, TT) :-
                    , get_path_entry(P, Entry)), Entries),
     (   tt_check_d(Entries), ! ; tte("Duplicate entry points found for closed paths: ~w",
                                      TT, Entries)),
-    forall(member(PC, Closed), tt_check_path(PC, Tiles, closed, TT)),
-    forall(member(PO, Open), tt_check_path(PO, Tiles, open, TT))
+    forall(member(PC, Closed), tt_check_path(PC, Tiles, closed, _, TT)),
+    forall(member(PO, Open), tt_check_path(PO, Tiles, open, _, TT))
     .
 
-tt_check_path(Path, Tiles, Type, TT) :-
+tt_check_path(Path, Tiles, Type, BType, TT) :-
     tt_get_path_components(Path, (XI, YI), PTiles, TT), entry_point(XI, YI, DI),
     rts(Rts), member('#9'/'R0'/_/DI/DX/DY, Rts), X2 is XI-2+DX, Y2 is YI-2+DY,
-    tt_path_it(X2, Y2, DI, PTiles, Tiles, Type, Path, TT).
+    tt_path_it(X2, Y2, DI, PTiles, Tiles, Type, Path, BType, TT).
 
-tt_path_it(X, Y, _, Path, _, Type, PPath, TT) :-
+tt_path_it(X, Y, _, Path, _, Type, PPath, BType, TT) :-
 %    format("~w ~w~n", [X, Y]),
     exit_point(X, Y, _), !,
     (   Type == closed, ! ;
           tte("Path was supposed to be open but reached exit point: ~w", TT, [PPath])),
     (   Path == [], ! ; tte("Tiles beyond exit point in path: ~w. Tiles found: ~w",
-                            TT, [PPath, Path])).
-tt_path_it(X, Y, _, [], Tiles, open, PPath, TT) :-
+                            TT, [PPath, Path])),
+    (   center_space(X, Y) -> BType = center ; BType = edge )
+    .
+tt_path_it(X, Y, _, [], Tiles, open, PPath, _, TT) :-
     \+ member(((X, Y), _, _), Tiles), ! ;
              tte("Open path ~w stopped at (~w, ~w) but tile is present", TT, [PPath, X, Y]).
-tt_path_it(X, Y, D, [(T, R) | Path], Tiles, Type, PPath, TT) :-
+tt_path_it(X, Y, D, [(T, R) | Path], Tiles, Type, PPath, BType, TT) :-
     (   member(((X, Y), T, R), Tiles), ! ;
              tte("Tile ~w part of path ~w is not a tile placed in the game",
                  TT, [((X, Y), T, R), PPath])),
@@ -567,8 +607,8 @@ tt_path_it(X, Y, D, [(T, R) | Path], Tiles, Type, PPath, TT) :-
              tte("Internal: Cannot find information on tile ~w/~w", TT, [T, R])),
     X2 is X-2+DXA, Y2 is Y-2+DYA,
 %    format("from ~w ~w ~w to ~w ~w ~w~n", [X, Y, D, X2, Y2, E]),
-    tt_path_it(X2, Y2, E, Path, Tiles, Type, PPath, TT).
-tt_path_it(X, Y, D, Path, _, Type, PPath, TT) :-
+    tt_path_it(X2, Y2, E, Path, Tiles, Type, PPath, BType, TT).
+tt_path_it(X, Y, D, Path, _, Type, PPath, _, TT) :-
     tte("Other error relating to ~w path ~w when reached ~w/~w/~w with remaining tiles ~w",
         TT, [Type, PPath, X, Y, D, Path]).
 
