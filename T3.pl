@@ -289,62 +289,15 @@ apply_move(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAft
 
 							check_open_paths([(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths, GameStateAfter). % Verific daca exista drumuri in OpenPaths care pot fi inchise
 
-							% GameStateAfter2 = [(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths.
-
-% findall(Move, (member(M, [6/3/ '#4'/'R1',6/2/ '#9'/'R0',6/1/ '#7'/'R2',7/8/ '#5'/'R3',7/7/ '#7'/'R2',7/6/ '#10'/'R0',7/5/ '#5'/'R1',7/4/ '#7'/'R3',7/3/ '#5'/'R2',7/2/ '#3'/'R3',7/1/ '#7'/'R3',8/8/ '#8'/'R0',8/7/ '#8'/'R0',8/6/ '#2'/'R0',8/5/ '#7'/'R0',8/4/ '#8'/'R0',8/3/ '#7'/'R1',8/2/ '#5'/'R1',8/1/ '#7'/'R1']), M = X/Y/TID/RID, Move = ((X,Y),TID,RID)), Moves), member(MOVE, Moves).
-
-% initial_game_state(GameState), apply_move(GameState, ((8,1),'#7','R1'), G1), apply_move(G1, ((8,2),'#5','R1'), G2), apply_move(G2, ((8,3),'#7','R1'), G3), apply_move(G3, ((8,4),'#8','R0'), G4), apply_move(G4, ((8,5),'#7','R0'), G5), apply_move(G5, ((8,6),'#2','R0'), G6), apply_move(G6, ((8,7),'#8','R0'), G7), apply_move(G7, ((8,8),'#8','R0'),G8), apply_move(G8, ((7,1),'#7','R3'), G9),apply_move(G9, ((7,2),'#3','R3'), G10), apply_move(G10, ((7,3), '#5','R2'), G11), apply_move(G11, ((7,4),'#7','R3'), G12), apply_move(G12, ((7,5),'#5','R1'), G13), apply_move(G13, ((7,6),'#10','R0'), G14), apply_move(G14, ((7,7),'#7','R2'), G15), apply_move(G15, ((7,8),'#5','R3'), G16), apply_move(G16, ((6,1),'#7','R2'), G17), apply_move(G17, ((6,2),'#9','R0'), G18), apply_move(G18, ((6,3),'#4','R1'), G19), G = G19, get_open_paths(G, Open), get_closed_paths(G, Closed), available_move(G, ((6,4),TID,RID)).
-
-% initial_game_state(GameState), apply_move(GameState, ((8,1),'#7','R1'), G1), apply_move(G1, ((8,2),'#5','R1'), G2), apply_move(G2, ((8,3),'#7','R1'), G3), apply_move(G3, ((8,4),'#8','R0'), G4), apply_move(G4, ((8,5),'#7','R0'), G5), apply_move(G5, ((8,6),'#2','R0'), G6), apply_move(G6, ((8,7),'#8','R0'), G7), apply_move(G7, ((8,8),'#8','R0'),G8), apply_move(G8, ((7,1),'#7','R3'), G9),apply_move(G9, ((7,2),'#3','R3'), G10), apply_move(G10, ((7,3), '#5','R2'), G11), apply_move(G11, ((7,4),'#7','R3'), G12), apply_move(G12, ((7,5),'#5','R1'), G13), apply_move(G13, ((7,6),'#10','R0'), G14), apply_move(G14, ((7,7),'#7','R2'), G15), apply_move(G15, ((7,8),'#5','R3'), G16), apply_move(G16, ((6,1),'#7','R2'), G17), apply_move(G17, ((6,2),'#9','R0'), G18), apply_move(G18, ((6,3),'#4','R1'), G19), G = G19, get_open_paths(G, Open), get_closed_paths(G, Closed), Coord = (6,4), Move = (Coord, TID, RID), get_neighbours(G, Coord, NeighList), gen_all_tiles(Tiles), findall(Neigh2, (member(Neigh, NeighList), Neigh = (Xn,Yn), Neigh2=(Xn,Yn,Dir), exit_point(Xn,Yn,Dir)),NeighList2), get_valid_rotations_in_margin2('#7',s,w,RotationsList).
-
-apply_move2(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAfter) :- 
-							get_neighbours(PlacedTileList:_:_, Coord, NeighList), (
-							(	% Am doar vecini entry_point, deci se porneste o cale noua.
-								forall(member((Xn, Yn), NeighList), entry_point(Xn, Yn, _)),
-								(NeighList = [N1], N1 = (X1, Y1), entry_point(X1, Y1, Dir1), reverse_dir(Dir1, Entry_Dir1), compute_exit_dir(TID, RID, Entry_Dir1, Exit_Dir1), 
-									NewPath = N1:[(TID, RID):Coord:Entry_Dir1:Exit_Dir1], ResultOpenPaths = [NewPath | OpenPaths]);	% Am doar un vecin entry_point
-								(NeighList = [N1, N2], N1 = (X1, Y1), N2 = (X2, Y2), entry_point(X1, Y1, Dir1), entry_point(X2, Y2, Dir2), reverse_dir(Dir1, Entry_Dir1), reverse_dir(Dir2, Entry_Dir2), 
-									compute_exit_dir(TID, RID, Entry_Dir1, Exit_Dir1), compute_exit_dir(TID, RID, Entry_Dir2, Exit_Dir2),
-									NewPath1 = N1:[(TID, RID):Coord:Entry_Dir1:Exit_Dir1], NewPath2 = N2:[(TID, RID):Coord:Entry_Dir2:Exit_Dir2], ResultOpenPaths = [NewPath1, NewPath2 | OpenPaths])	% Am doi vecini entry_point
-								);
-							(	% Am doar carti vecine(nu am vecini exit_point)
-								forall(member((Xn, Yn), NeighList), \+exit_point(Xn, Yn, _)),
-								findall(NewPath,
-									(
-										member(Path, OpenPaths), Path = _:Path2, Path2 = [H2|_], explore_open_path([(Coord, TID, RID) | PlacedTileList]:_:_, Path2, H2, [], NewPath)
-										),
-									ResultOpenPaths)
-								/*findall(NewPath,
-									(
-										member(Path, OpenPaths), Path = StartCoord:Path_TilesList, Path_TilesList = [Head |_], Head = _:Head_Coord:_:Head_ExitDir,
-										(	% vv Drumul care ramane deschis in Head este orientat catre Coord(Move-ul curent), adica daca as aplica acest Move, drumul s-ar prelungi prin cartea plasata in urma aplicarii lui Move
-											(whereis(Head_Coord, Coord, Head_ExitDir), reverse_dir(Head_ExitDir, My_EntryDir), 
-												compute_exit_dir(TID, RID, My_EntryDir, My_ExitDir), NewPath_TilesList = [ (TID, RID):Coord:My_EntryDir:My_ExitDir | Path_TilesList ], NewPath = StartCoord:NewPath_TilesList);
-											% vv Drumul deschis nu ajunge in cartea noua
-											(\+whereis(Head_Coord, Coord, Head_ExitDir), NewPath = Path)
-											)
-										),
-									NewOpenPaths)*/
-								)
-							/*(	% Am si carti vecine, si entry
-								)*/
-							),
-							/*findall(ResultPath,
-								(member(Path2, NewOpenPaths), Path2 = _:[H2 |_], explore_open_path([(Coord, TID, RID) | PlacedTileList]:_:_, Path2, H2, [], ResultPath)),
-								ResultOpenPaths),*/
-							GameStateAfter = [(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths.	%+OpenPaths si ClosedPaths
-
 % pick_move(+GameState, +TID, -Move)
 % Alege o mutare care folosește cartea cu identificatorul TID,
 % pentru a fi aplicată în starea GameState. Mutarea este
 % întoarsă în Move.
-pick_move(_,_,_) :- fail.
-
-add_test(List, ResultList) :-
-				findall(List2Mod,
-					(member(List2, List), ((findall(Numar, (member(Numar, List2), Numar < 2), [_|_]), List2Mod = [a | List2]); (findall(Numar, (member(Numar, List2), Numar >= 2), List2), List2Mod = List2))),
-						ResultList
-					).
+pick_move(GameState, TID, Move) :-
+						findall(AuxMove,
+							(AuxMove = (_,TID,_), available_move(GameState, AuxMove)),
+							Moves),
+						Moves = [Move |_].
 
 % play_game(-FinalGameState)
 % Joacă un joc complet, pornind de la starea inițială a jocului
@@ -354,8 +307,23 @@ add_test(List, ResultList) :-
 % predicatul next_tile(+Time, -TID), unde Time este legat la
 % numărul de mutări realizate până în momentul curent, iar
 % predicatul next_tile va lega TID la un identificator de carte.
-play_game(_) :- fail.
+play_game(FinalGameState) :-
+				initial_game_state(GameState),
+				play_the_game(GameState, 0, FinalGameState).
 
+play_the_game(GameState, Time, FinalGameState) :-
+								next_tile(Time, TID),
+								(
+									(\+available_move(GameState, (_,TID,_)), FinalGameState = GameState, !);
+									pick_move(GameState, TID, Move),
+									apply_move(GameState, Move, GameStateAfter),
+									Time2 is Time+1,
+									play_the_game(GameStateAfter, Time2, FinalGameState)
+									).
+
+
+%test2(Res, Res) :- Res = 10.
+test2(X, Res):- (X = 10, Res = X, !); X<10, X1 is X+1, test2(X1, Res).
 
 
 
