@@ -1,0 +1,8 @@
+Metro Board game for one player.
+
+The current game state is represented by PlacedTilesList:OpenPaths:ClosedPaths, where:
+	- PlacedTilesList is a list with (Coordinates, TileID, RotationID) as elements, representing all the cards that have been placed until now
+	- OpenPaths is a list with all the paths that remain open. A path is represented by EntryPointCoordinates:TilesList, where TilesList is a list with all the tiles composing the path
+	- ClosedPaths is identical to OpenPaths, but the paths are complete(they reach an exit point).
+
+For more info, please check http://www.bluering.nl/sieuwert/games/metro/

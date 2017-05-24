@@ -18,10 +18,6 @@ initial_game_state([]:[]:[]).
 % - identificatorul cărții (#1..#10)
 % - identificatorul rotației (R0..R3)
 get_game_tiles(PlacedTileList:_:_, PlacedTileList).
-%get_game_tiles(GameState, PlacedTileList) :- GameState = PlacedTileList1:_:_, Tile = Coord:TID:RID,
-%								findall(Result,
-%									(member(Tile, PlacedTileList1), Result = (Coord, TID, RID)),
-%									PlacedTileList).
 
 % get_open_paths(+GameState, -Paths)
 % Întoarce în Paths o listă de trasee care pornesc
@@ -90,9 +86,6 @@ generate_rotation(Tile, Rot, Acc1, ResultTilesList, Acc2, ResultRotationList) :-
 															generate_rotation(ResultTile, ResultRotation, [ResultTile|Acc1], ResultTilesList, [ResultRotation|Acc2], ResultRotationList).
 generate_rotation(Tile, Rot, Acc1, Res1, Acc2, Acc2) :- Tile = _:_:_:_:TID, highest_rotation(TID, MaxRot), Rot = MaxRot, reverse(Acc1, Res1), !.
 
-%generate_rotation(_, 0, Acc1, Res1, Acc2, Res2) :- reverse(Acc1, Res1), reverse(Acc2, Res2), !.
-%generate_rotation(Tile, Rot, Acc1, ResultTileList, Acc2, ResultRotationList) :- Tile = DW:DS:DE:DN:TID, ResultTile = DN:DW:DS:DE:TID, ResultRotation is Rot - 1, 
-%												generate_rotation(ResultTile, ResultRotation, [ResultTile|Acc1], ResultTileList, [ResultRotation|Acc2], ResultRotationList).
 
 % get_valid_rotations_in_margin1(+TID, +Dir, -RotationsList)
 % Genereaza rotatiile posibile pentru cartea respectiva, in cazul cu un singur vecin entry_point
@@ -226,9 +219,9 @@ whereis(MyCoord, TargetCoord, ResultDir) :-
 								MyCoord = (X, Y),
 								TargetCoord = (Xt, Yt),
 								(
-									(Xt = X, Yt is Y-1, ResultDir = n);
-									(Xt is X-1, Yt = Y, ResultDir = w);
-									(Xt = X, Yt is Y+1, ResultDir = s);
+									(Xt = X, Yt is Y-1, ResultDir = n, !);
+									(Xt is X-1, Yt = Y, ResultDir = w, !);
+									(Xt = X, Yt is Y+1, ResultDir = s, !);
 									(Xt is X+1, Yt = Y, ResultDir = e)
 									).
 
@@ -239,10 +232,10 @@ explore_open_path(PlacedTileList:_:_, CurrentPath, Current, Acc, FinalOpenPath) 
 										Current = _:(X,Y):_:Exit_Dir,
 										whereis((X, Y), (Xt, Yt), Exit_Dir),
 										(
-											(\+member(((Xt, Yt),_,_), PlacedTileList), \+exit_point(Xt, Yt, _), myConcat(Acc, CurrentPath, FinalOpenPath));	% Nu am carte in continuarea drumului
+											(\+member(((Xt, Yt),_,_), PlacedTileList), \+exit_point(Xt, Yt, _), myConcat(Acc, CurrentPath, FinalOpenPath), !);	% Nu am carte in continuarea drumului
 											(Tile = ((Xt, Yt),TID,RID), member(Tile, PlacedTileList), 	% In continuare, am o carte
 												reverse_dir(Exit_Dir, New_Entry_Dir), compute_exit_dir(TID, RID, New_Entry_Dir, New_Exit_Dir), NewPathElem = (TID, RID):(Xt,Yt):New_Entry_Dir:New_Exit_Dir,
-												explore_open_path(PlacedTileList:_:_, CurrentPath, NewPathElem, [NewPathElem | Acc], FinalOpenPath));	% Explorez mai departe traseul prin cartea vecina
+												explore_open_path(PlacedTileList:_:_, CurrentPath, NewPathElem, [NewPathElem | Acc], FinalOpenPath), !);	% Explorez mai departe traseul prin cartea vecina
 											(	% In continuare am un exit_point
 												exit_point(Xt, Yt, _),
 												myConcat(Acc, CurrentPath, FinalOpenPath)
@@ -254,7 +247,10 @@ check_open_paths(PlacedTileList:OpenPaths:ClosedPaths, ResultGameState) :-
 								(member(Path, OpenPaths), Path = StartCoord:Path2, Path2 = [H2|_], H2 = _:(X, Y):_:Exit_Dir, 
 									whereis((X,Y), (Xn, Yn), Exit_Dir), exit_point(Xn, Yn, _)),
 								AuxClosedPaths),
-							myConcat(AuxClosedPaths, ClosedPaths, ResultClosedPaths),
+							myConcat(AuxClosedPaths, ClosedPaths, ResultClosedPaths2),
+							((setof(M,
+									member(M, ResultClosedPaths2),
+									ResultClosedPaths), !); ResultClosedPaths = []),	% Se pot genera cai duplicate in concatenare
 							findall(Path,
 								(member(Path, OpenPaths), Path = StartCoord:Path2, Path2 = [H2|_], H2 = _:(X,Y):_:Exit_Dir, 
 									whereis((X,Y), (Xn,Yn), Exit_Dir), \+exit_point(Xn,Yn,_)),
@@ -281,11 +277,7 @@ apply_move(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAft
 									explore_open_path([(Coord, TID, RID) | PlacedTileList]:_:_, Path2, H2, [], NewPath2), 
 									NewPath = StartCoord:NewPath2
 									),
-								ResultOpenPathsTmp),
-
-							setof(Tmp,
-								member(Tmp, ResultOpenPathsTmp),
-								ResultOpenPaths), % Nu imi dau seama de ce, dar cu findall se creeaza duplicate.. Pur si simplu pentru un singur Path in AuxPaths, il ia de doua ori o.o
+								ResultOpenPaths),
 
 							check_open_paths([(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths, GameStateAfter). % Verific daca exista drumuri in OpenPaths care pot fi inchise
 
