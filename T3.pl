@@ -132,12 +132,10 @@ get_valid_rotations_in_margin2(TID, Dir1, Dir2, RotationsList) :-
 
 % filter_tiles_by_neighbours(+Tiles, +NeighList, -ResultTilesList)
 % Pastreaza din lista de carti doar pe cele care pot fi folosite, tinand cont de vecinii din margine.
-filter_tiles_by_neighbours(Tiles, NeighList, ResultTilesList) :-
+filter_tiles_by_neighbours(Tiles, Coord, NeighList, ResultTilesList) :-
 															Tile = TID:_,
-															Neigh = (Xn, Yn),
-															Neigh2 = (Xn, Yn, Dir),
 															findall(Neigh2,
-																(member(Neigh, NeighList), exit_point(Xn, Yn, Dir)),
+																(member(Neigh, NeighList), Neigh = (Xn, Yn), Neigh2 = (Xn, Yn, RDir), entry_point(Xn, Yn, Dir), reverse_dir(Dir, RDir), whereis(Coord, (Xn, Yn), RDir)),
 																NeighList2),	% Fac o lista cu vecinii din marginea hartii, memorand si directia spre care pleaca trenul.
 															findall(TileResult,
 																(member(Tile, Tiles),
@@ -173,7 +171,7 @@ available_move(GameState, Move) :-
 								(member(Neigh, NeighList), Neigh = (Xn, Yn), (entry_point(Xn, Yn, _); member((Neigh,_,_), PlacedTileList))),
 								[ _ |_]),	% Elimin coordonatele care nu sunt invecinate cu spatii deja ocupate(cartea trebuie plasata langa o margine a hartii sau langa o alta carte)
 							gen_all_tiles(Tiles),
-							filter_tiles_by_neighbours(Tiles, NeighList, ResultTilesList),
+							filter_tiles_by_neighbours(Tiles, Coord, NeighList, ResultTilesList),
 							member(Elem, ResultTilesList), Elem = TID:RID.
 
 
@@ -251,6 +249,18 @@ explore_open_path(PlacedTileList:_:_, CurrentPath, Current, Acc, FinalOpenPath) 
 												)
 											).
 
+check_open_paths(PlacedTileList:OpenPaths:ClosedPaths, ResultGameState) :-
+							findall(Path,
+								(member(Path, OpenPaths), Path = StartCoord:Path2, Path2 = [H2|_], H2 = _:(X, Y):_:Exit_Dir, 
+									whereis((X,Y), (Xn, Yn), Exit_Dir), exit_point(Xn, Yn, _)),
+								AuxClosedPaths),
+							myConcat(AuxClosedPaths, ClosedPaths, ResultClosedPaths),
+							findall(Path,
+								(member(Path, OpenPaths), Path = StartCoord:Path2, Path2 = [H2|_], H2 = _:(X,Y):_:Exit_Dir, 
+									whereis((X,Y), (Xn,Yn), Exit_Dir), \+exit_point(Xn,Yn,_)),
+								ResultOpenPaths),
+							ResultGameState = PlacedTileList:ResultOpenPaths:ResultClosedPaths.
+
 % apply_move(+GameStateBefore, +Move, -GameStateAfter)
 % Leagă al treilea argument la starea de joc care rezultă
 % în urma aplicării mutării Move în starea GameStateBefore.
@@ -267,13 +277,25 @@ apply_move(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAft
 							
 							findall(NewPath,
 								(
-									member(Path, AuxPaths), Path = StartCoord:Path2, Path2 = [H2|_], explore_open_path([(Coord, TID, RID) | PlacedTileList]:_:_, Path2, H2, [], NewPath2), NewPath = StartCoord:NewPath2
+									member(Path, AuxPaths), Path = StartCoord:Path2, Path2 = [H2|_], 
+									explore_open_path([(Coord, TID, RID) | PlacedTileList]:_:_, Path2, H2, [], NewPath2), 
+									NewPath = StartCoord:NewPath2
 									),
-								ResultOpenPaths),
+								ResultOpenPathsTmp),
 
-							% TODO: Check if an open path can be closed.
+							setof(Tmp,
+								member(Tmp, ResultOpenPathsTmp),
+								ResultOpenPaths), % Nu imi dau seama de ce, dar cu findall se creeaza duplicate.. Pur si simplu pentru un singur Path in AuxPaths, il ia de doua ori o.o
 
-							GameStateAfter = [(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths.
+							check_open_paths([(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths, GameStateAfter). % Verific daca exista drumuri in OpenPaths care pot fi inchise
+
+							% GameStateAfter2 = [(Coord, TID, RID) | PlacedTileList]:ResultOpenPaths:ClosedPaths.
+
+% findall(Move, (member(M, [6/3/ '#4'/'R1',6/2/ '#9'/'R0',6/1/ '#7'/'R2',7/8/ '#5'/'R3',7/7/ '#7'/'R2',7/6/ '#10'/'R0',7/5/ '#5'/'R1',7/4/ '#7'/'R3',7/3/ '#5'/'R2',7/2/ '#3'/'R3',7/1/ '#7'/'R3',8/8/ '#8'/'R0',8/7/ '#8'/'R0',8/6/ '#2'/'R0',8/5/ '#7'/'R0',8/4/ '#8'/'R0',8/3/ '#7'/'R1',8/2/ '#5'/'R1',8/1/ '#7'/'R1']), M = X/Y/TID/RID, Move = ((X,Y),TID,RID)), Moves), member(MOVE, Moves).
+
+% initial_game_state(GameState), apply_move(GameState, ((8,1),'#7','R1'), G1), apply_move(G1, ((8,2),'#5','R1'), G2), apply_move(G2, ((8,3),'#7','R1'), G3), apply_move(G3, ((8,4),'#8','R0'), G4), apply_move(G4, ((8,5),'#7','R0'), G5), apply_move(G5, ((8,6),'#2','R0'), G6), apply_move(G6, ((8,7),'#8','R0'), G7), apply_move(G7, ((8,8),'#8','R0'),G8), apply_move(G8, ((7,1),'#7','R3'), G9),apply_move(G9, ((7,2),'#3','R3'), G10), apply_move(G10, ((7,3), '#5','R2'), G11), apply_move(G11, ((7,4),'#7','R3'), G12), apply_move(G12, ((7,5),'#5','R1'), G13), apply_move(G13, ((7,6),'#10','R0'), G14), apply_move(G14, ((7,7),'#7','R2'), G15), apply_move(G15, ((7,8),'#5','R3'), G16), apply_move(G16, ((6,1),'#7','R2'), G17), apply_move(G17, ((6,2),'#9','R0'), G18), apply_move(G18, ((6,3),'#4','R1'), G19), G = G19, get_open_paths(G, Open), get_closed_paths(G, Closed), available_move(G, ((6,4),TID,RID)).
+
+% initial_game_state(GameState), apply_move(GameState, ((8,1),'#7','R1'), G1), apply_move(G1, ((8,2),'#5','R1'), G2), apply_move(G2, ((8,3),'#7','R1'), G3), apply_move(G3, ((8,4),'#8','R0'), G4), apply_move(G4, ((8,5),'#7','R0'), G5), apply_move(G5, ((8,6),'#2','R0'), G6), apply_move(G6, ((8,7),'#8','R0'), G7), apply_move(G7, ((8,8),'#8','R0'),G8), apply_move(G8, ((7,1),'#7','R3'), G9),apply_move(G9, ((7,2),'#3','R3'), G10), apply_move(G10, ((7,3), '#5','R2'), G11), apply_move(G11, ((7,4),'#7','R3'), G12), apply_move(G12, ((7,5),'#5','R1'), G13), apply_move(G13, ((7,6),'#10','R0'), G14), apply_move(G14, ((7,7),'#7','R2'), G15), apply_move(G15, ((7,8),'#5','R3'), G16), apply_move(G16, ((6,1),'#7','R2'), G17), apply_move(G17, ((6,2),'#9','R0'), G18), apply_move(G18, ((6,3),'#4','R1'), G19), G = G19, get_open_paths(G, Open), get_closed_paths(G, Closed), Coord = (6,4), Move = (Coord, TID, RID), get_neighbours(G, Coord, NeighList), gen_all_tiles(Tiles), findall(Neigh2, (member(Neigh, NeighList), Neigh = (Xn,Yn), Neigh2=(Xn,Yn,Dir), exit_point(Xn,Yn,Dir)),NeighList2), get_valid_rotations_in_margin2('#7',s,w,RotationsList).
 
 apply_move2(PlacedTileList:OpenPaths:ClosedPaths, (Coord, TID, RID), GameStateAfter) :- 
 							get_neighbours(PlacedTileList:_:_, Coord, NeighList), (
